@@ -1928,7 +1928,21 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     boolean isSecureLocked() {
-        return false;
+        if (mWmService.getDisableSecureWindows()) {
+            return false;
+        }
+
+        if ((mAttrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
+            return true;
+        }
+
+        // block screen capture to protect sensitive notifications or content on the screen.
+        if (mWmService.mSensitiveContentPackages.shouldBlockScreenCaptureForApp(
+                getOwningPackage(), getOwningUid(), getWindowToken())) {
+            return true;
+        }
+
+        return !DevicePolicyCache.getInstance().isScreenCaptureAllowed(mShowUserId);
     }
 
     /**

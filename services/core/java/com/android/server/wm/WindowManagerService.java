@@ -10153,7 +10153,28 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     @Override
     public List<ComponentName> notifyScreenshotListeners(int displayId) {
-        return new ArrayList<>();
+        // make sure caller is SysUI.
+        if (!checkCallingPermission(STATUS_BAR_SERVICE,
+                "notifyScreenshotListeners()")) {
+            throw new SecurityException("Requires STATUS_BAR_SERVICE permission");
+        }
+        synchronized (mGlobalLock) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent == null) {
+                return new ArrayList<>();
+            }
+            ArraySet<ComponentName> notifiedApps = new ArraySet<>();
+            displayContent.forAllActivities(
+                    (ar) -> {
+                        if (!notifiedApps.contains(ar.mActivityComponent) && ar.isVisible()
+                                && ar.isRegisteredForScreenCaptureCallback()) {
+                            ar.reportScreenCaptured();
+                            notifiedApps.add(ar.mActivityComponent);
+                        }
+                    },
+                    true /* traverseTopToBottom */);
+            return List.copyOf(notifiedApps);
+        }
     }
 
     @RequiresPermission(ACCESS_SURFACE_FLINGER)
@@ -10195,15 +10216,19 @@ public class WindowManagerService extends IWindowManager.Stub
     @EnforcePermission(android.Manifest.permission.DETECT_SCREEN_RECORDING)
     @Override
     public boolean registerScreenRecordingCallback(IScreenRecordingCallback callback) {
-        return true;
+        registerScreenRecordingCallback_enforcePermission();
+        return mScreenRecordingCallbackController.register(callback);
     }
 
     @EnforcePermission(android.Manifest.permission.DETECT_SCREEN_RECORDING)
     @Override
     public void unregisterScreenRecordingCallback(IScreenRecordingCallback callback) {
+        unregisterScreenRecordingCallback_enforcePermission();
+        mScreenRecordingCallbackController.unregister(callback);
     }
 
     void onProcessActivityVisibilityChanged(int uid, boolean visible) {
+        mScreenRecordingCallbackController.onProcessActivityVisibilityChanged(uid, visible);
     }
 
     /**
